@@ -1,0 +1,249 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          firewall.sh
+# Required-Start:    $syslog $network
+# Required-Stop:     $syslog $network
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Start firewall daemon at boot time
+# Description:       Custom Firewall scrip.
+### END INIT INFO
+ 
+#
+# Simple Firewall configuration.
+#
+# Original author : Nicolargo
+#
+# chkconfig: 2345 9 91
+# description: Activates/Deactivates the firewall at boot time
+#
+
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
+# Services that the system will offer to the network
+TCP_SERVICES="22" # SSH only
+UDP_SERVICES=""
+# Services the system will use from the network
+REMOTE_TCP_SERVICES="80 443" # web browsing
+REMOTE_UDP_SERVICES="53" # DNS
+
+# Network that will be used for remote mgmt
+# (if undefined, no rules will be setup)
+# NETWORK_MGMT=192.168.0.0/24
+
+# Port used for the SSH service, define this is you have setup a
+# management network but remove it from TCP_SERVICES
+SSH_PORT="22"
+
+CONFIGURATION_FILE=/etc/firewall/firewall.conf
+if [ -f $CONFIGURATION_FILE ] ; then
+	. $CONFIGURATION_FILE
+fi
+
+IP_TABLES="/sbin/iptables"
+ 
+if ! [ -x $IP_TABLES ]; then
+	exit 0
+fi
+ 
+##########################
+# Start the Firewall rules
+##########################
+ 
+fw_start () {
+	#**************************************************************************#
+	# Input traffic:
+	#**************************************************************************#
+	
+	### Keep existing connections
+	$IP_TABLES -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+	# Services
+	if [ -n "$TCP_SERVICES" ] ; then
+		for PORT in $TCP_SERVICES; do
+			$IP_TABLES -A INPUT -p tcp --dport ${PORT} -j ACCEPT
+		done
+	fi
+	if [ -n "$UDP_SERVICES" ] ; then
+		for PORT in $UDP_SERVICES; do
+			$IP_TABLES -A INPUT -p udp --dport ${PORT} -j ACCEPT
+		done
+	fi
+	# Remote management
+	if [ -n "$NETWORK_MGMT" ] ; then
+		$IP_TABLES -A INPUT -p tcp --src ${NETWORK_MGMT} --dport ${SSH_PORT} -j ACCEPT
+	else
+		$IP_TABLES -A INPUT -p tcp --dport ${SSH_PORT}  -j ACCEPT
+	fi
+	
+	#**************************************************************************#
+	# NGINX
+	#**************************************************************************#
+	$IP_TABLES -A INPUT -i lo -s localhost -d localhost -j ACCEPT
+	$IP_TABLES -A OUTPUT -o lo -s localhost -d localhost -j ACCEPT
+	$IP_TABLES -A INPUT  -p tcp --dport http -j ACCEPT
+        $IP_TABLES -A INPUT  -p tcp --dport https -j ACCEPT
+	
+	
+	# Remote testing
+	### Allows PING 
+	$IP_TABLES -A INPUT -p icmp -j ACCEPT
+	### Allows LOOPBACK 
+	$IP_TABLES -A INPUT -i lo -j ACCEPT
+	
+	$IP_TABLES -P INPUT DROP
+	$IP_TABLES -A INPUT -j LOG
+	 
+	#**************************************************************************#
+	# Output:
+	#**************************************************************************#
+	### Allows LOOPBACK 
+	$IP_TABLES -A OUTPUT -j ACCEPT -o lo
+	
+	###  
+	$IP_TABLES -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+	
+	# ICMP is permitted:
+	### Allows ping: 
+	$IP_TABLES -A OUTPUT -p icmp -j ACCEPT
+	
+	# So are security package updates:
+	# Note: You can hardcode the IP address here to prevent DNS spoofing
+	# and to setup the rules even if DNS does not work but then you
+	# will not "see" IP changes for this service:
+	$IP_TABLES -A OUTPUT -p tcp -d security.debian.org --dport 80 -j ACCEPT
+	$IP_TABLES -A OUTPUT -p tcp -d www.dokuwiki.org --dport 80 -j ACCEPT
+	
+	# As well as the services we have defined:
+	if [ -n "$REMOTE_TCP_SERVICES" ] ; then
+		for PORT in $REMOTE_TCP_SERVICES; do
+			$IP_TABLES -A OUTPUT -p tcp --dport ${PORT} -j ACCEPT
+		done
+	fi
+	if [ -n "$REMOTE_UDP_SERVICES" ] ; then
+		for PORT in $REMOTE_UDP_SERVICES; do
+			$IP_TABLES -A OUTPUT -p udp --dport ${PORT} -j ACCEPT
+		done
+	fi
+	# All other connections are registered in syslog
+	$IP_TABLES -A OUTPUT -j LOG
+	$IP_TABLES -A OUTPUT -j REJECT
+	$IP_TABLES -P OUTPUT DROP
+	
+	$IP_TABLES -A FORWARD -j LOG
+		
+
+
+
+	#**************************************************************************#
+	# DOS attack protection
+	#**************************************************************************#
+	# Voir http://rockdio.org/ayudatech/how-to-stop-small-ddos-attacks-some-basic-security-advice/
+	# 
+	$IP_TABLES -I INPUT -p tcp --dport 80 -i venet0 -m state --state NEW -m recent --set
+	$IP_TABLES -I INPUT -p tcp --dport 80 -i venet0 -m state --state NEW -m recent --update --seconds 30 --hitcount 20 -j DROP
+	$IP_TABLES -I INPUT -p tcp --dport 443 -i venet0 -m state --state NEW -m recent --set
+	$IP_TABLES -I INPUT -p tcp --dport 443 -i venet0 -m state --state NEW -m recent --update --seconds 30 --hitcount 20 -j DROP
+
+	#**************************************************************************#
+	# Other network protections
+	# (some will only work with some kernel versions)
+	#**************************************************************************#
+	echo 1 > /proc/sys/net/ipv4/tcp_syncookies
+	echo 0 > /proc/sys/net/ipv4/ip_forward
+	echo 1 > /proc/sys/net/ipv4/icmp_echo_ignore_broadcasts
+	echo 1 > /proc/sys/net/ipv4/conf/all/log_martians
+	echo 1 > /proc/sys/net/ipv4/icmp_ignore_bogus_error_responses
+	echo 1 > /proc/sys/net/ipv4/conf/all/rp_filter
+	echo 0 > /proc/sys/net/ipv4/conf/all/send_redirects
+	echo 0 > /proc/sys/net/ipv4/conf/all/accept_source_route
+	 
+	iptables -t filter -A OUTPUT -p tcp --dport 22 -j ACCEPT  
+	iptables -t filter -A INPUT -p tcp --dport 22 -j ACCEPT  
+}
+ 
+##########################
+# Stop the Firewall rules
+##########################
+ 
+fw_stop () {
+	$IP_TABLES -F
+	$IP_TABLES -t nat -F
+	$IP_TABLES -t mangle -F
+	$IP_TABLES -P INPUT DROP
+	$IP_TABLES -P FORWARD DROP
+	$IP_TABLES -P OUTPUT ACCEPT
+}
+ 
+##########################
+# Clear the Firewall rules
+##########################
+ 
+fw_clear () {
+	$IP_TABLES -F
+	$IP_TABLES -t nat -F
+	$IP_TABLES -t mangle -F
+	$IP_TABLES -P INPUT ACCEPT
+	$IP_TABLES -P FORWARD ACCEPT
+	$IP_TABLES -P OUTPUT ACCEPT
+}
+ 
+##########################
+# Test the Firewall rules
+##########################
+ 
+fw_save () {
+	$IP_TABLES-save > /etc/iptables.backup
+}
+ 
+fw_restore () {
+	if [ -e /etc/iptables.backup ]; then
+		$IP_TABLES-restore < /etc/iptables.backup
+	fi
+}
+ 
+fw_test () {
+	fw_save
+	sleep 30 && echo "Restore previous Firewall rules..." && fw_restore &
+	fw_stop
+	fw_start
+}
+ 
+case "$1" in
+	start|restart)
+		echo -n "Starting firewall.."
+		fw_stop
+		fw_start
+		echo "done."
+	;;
+	stop)
+		echo "###############################################################"
+		echo "I do not stop for now."
+		echo "Use 'clear' to remove all firewall blocking rules."
+		echo "Use 'dropall' to remove all firewall blocking rules."
+		echo "###############################################################"
+	;;
+	clear)
+		echo -n "Clearing firewall rules.."
+		fw_clear
+		echo "done."
+	;;
+	dropall)
+		echo -n "Droping all connections !!!"
+		fw_stop
+		echo "done."
+	;;
+	test)
+		echo -n "Test Firewall rules..."
+		fw_test
+		echo -n "Previous configuration will be restore in 30 seconds"
+	;;
+	*)
+		echo "Usage: $0 {start|dropall|stop|restart|clear|test}"
+		echo "###############################################################"
+		echo "# Be aware that 'stop' drop all incoming/outgoing traffic !!! #"
+		echo "###############################################################"
+		echo "Use clear option to allow all traffic."
+		exit 1
+	;;
+esac
+exit 0
