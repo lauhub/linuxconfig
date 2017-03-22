@@ -64,9 +64,13 @@ morpheus@server $ sudo systemctl status ssh
 
 ### Setup your firewall
 
-Using the given script, install your firewall. The best way to do this is to first clone this repository and then run the install script:
+
+Using the given script, install your firewall. The best way to do this is to first clone this repository and then run the install script.
+
+** You will need `git` and `make` to be installed**
 
 ```bash
+morpheus@server $ sudo apt-get update && sudo apt-get install git make
 morpheus@server $ git clone <THIS REPOS URL>
 morpheus@server $ sudo make
 ```

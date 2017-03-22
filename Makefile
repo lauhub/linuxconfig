@@ -7,4 +7,4 @@ FIREWALL_CONF=firewall.conf
 firewall:
 	$(CP) scripts/firewall /etc/init.d/firewall
 	$(MKDIR) -p $(FIREWALL_ETC_DIR)
-	$(CP) etc/firewall/$(FIREWALL_CONF) $(FIREWALL_ETC_DIR)/
+	$(CP) etc/$(FIREWALL_CONF) $(FIREWALL_ETC_DIR)/
