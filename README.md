@@ -77,3 +77,31 @@ morpheus@server $ sudo make
 
 #### Configuring the firewall
 Edit the /etc/firewall/firewall.conf file and then test your configuration
+
+
+#### Test the firewall
+The firewall is made to allow you testing new configuration for 30 seconds before it rollback to initial state. This is to avoid getting blocked by a misconfiguration.
+
+```bash
+morpheus@server $ sudo service firewall test
+```
+
+#### Enable the firewall
+Once tested (you should at least be able to open a new ssh session when firewall is active with new configuration), you can enable and start it.
+```bash
+sudo systemctl enable firewall.service
+sudo systemctl start firewall.service
+```
+
+#### Stopping firewall
+Stopping will drop all connections (which is not really cool)
+
+So to really clear all rules use (and open all in/out traffic):
+```bash
+sudo service firewall clear
+```
+
+And to really drop all rules use (and close all in/out traffic):
+```bash
+sudo service firewall dropall
+```
