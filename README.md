@@ -72,6 +72,7 @@ Using the given script, install your firewall. The best way to do this is to fir
 ```bash
 morpheus@server $ sudo apt-get update && sudo apt-get install git make
 morpheus@server $ git clone <THIS REPOS URL>
+morpheus@server $ cd linuxconfig
 morpheus@server $ sudo make
 ```
 
