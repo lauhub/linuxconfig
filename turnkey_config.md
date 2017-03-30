@@ -73,3 +73,8 @@ Cliquez sur `Change passwords`
 Modifiez les mots de passe:
 -  root
 -  mysql
+
+## Autres applications
+Rendez-vous sur la page suivante pour plus d'informations sur les applications disponibles: https://www.turnkeylinux.org/lampstack
+
+
