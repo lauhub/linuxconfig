@@ -1,4 +1,4 @@
-# Configuration d'une appliance tunrkey
+# Configuration d'une appliance Turnkey
 ## Mots de passe
 Au premier démarrage, un gros problème se pose: **le clavier est en américain**
 
